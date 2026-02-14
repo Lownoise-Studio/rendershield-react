@@ -19,8 +19,8 @@
       "LICENSE"
     ],
     "scripts": {
-      "build": "tsup",
-      "dev": "tsup --watch",
+      "build": "npx tsup",
+      "dev": "npx tsup --watch",
       "test": "vitest"
     },
     "peerDependencies": {
@@ -31,6 +31,8 @@
       "vitest": "^1.6.0",
       "@testing-library/react": "^14.0.0",
       "jsdom": "^24.0.0",
+      "react": "^18.0.0",
+      "react-dom": "^18.0.0",
       "typescript": "^5.0.0"
     }
   }
