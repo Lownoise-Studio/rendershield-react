@@ -1,169 +1,178 @@
+// src/hook.ts
+
 import { useMemo, useRef } from "react";
-import type { RenderShieldOptions, RenderShieldDiff } from "./types";
+import type { RenderShieldDiff, RenderShieldOptions } from "./types";
 import { getShallowDiff } from "./shallowCompare";
 import { compareWatchedPaths } from "./pathCompare";
 import { report } from "./report";
 
-export function useRenderShield<T>(
-  props: T,
-  options?: RenderShieldOptions<T>
-): T {
+/**
+ * useRenderShield
+ * - Shields by returning the previous value when the selected comparison says "equal".
+ * - Emits dev-only diagnostics when options.debug === true
+ *
+ * v0.3.0:
+ * - options.visual enables the dev HUD toast (only when shielded).
+ * - visual flag is carried into the report diff, so report.ts can decide.
+ */
+export function useRenderShield<T>(value: T, options?: RenderShieldOptions<T>): T {
   const opts = options ?? {};
+
   const prevRef = useRef<T | null>(null);
   const renderCountRef = useRef(0);
-
   renderCountRef.current += 1;
 
   const prev = prevRef.current;
 
-  const decided = useMemo(() => {
-    // First render: accept incoming props.
-    // IMPORTANT: we still run useMemo so hook order is stable.
+  const evaluation = useMemo(() => {
+    // Initial render: do not shield.
     if (prev === null) {
+      const stableKeys =
+        value && typeof value === "object"
+          ? Object.keys(value as any)
+          : [];
+
+      const initialDiff: RenderShieldDiff = {
+        componentName: opts.componentName,
+        shielded: false,
+        renderCount: renderCountRef.current,
+        changedKeys: [],
+        stableKeys,
+        watchedChanged: [],
+        watchedStable: opts.watch ?? [],
+        severity: "Stable",
+        visual: !!opts.visual,
+      };
+
       return {
         shielded: false,
-        nextValue: props,
-        shouldReportInitial: Boolean(opts.debug),
-        initialDiff: {
-          componentName: undefined,
-          shielded: false,
-          renderCount: renderCountRef.current,
-          changedKeys: [],
-          stableKeys: Object.keys((props as any) ?? {}),
-          watchedChanged: [],
-          watchedStable: opts.watch ?? [],
-          severity: "Stable",
-        } satisfies RenderShieldDiff,
+        nextValue: value,
+        shouldReportInitial: !!opts.debug,
+        initialDiff,
+        diff: undefined as RenderShieldDiff | undefined,
       };
     }
 
-    // 1) Custom comparator wins (user-owned)
+    // Custom comparator path
     if (typeof opts.customCompare === "function") {
-      const equal = opts.customCompare(prev, props);
+      const shielded = opts.customCompare(prev as T, value);
+
+      const diff: RenderShieldDiff = {
+        componentName: opts.componentName,
+        shielded,
+        renderCount: renderCountRef.current,
+        changedKeys: [],
+        stableKeys: [],
+        watchedChanged: [],
+        watchedStable: opts.watch ?? [],
+        severity: "Custom compare triggered",
+        visual: !!opts.visual,
+      };
 
       return {
-        shielded: equal,
-        nextValue: equal ? prev : props,
+        shielded,
+        nextValue: shielded ? (prev as T) : value,
         shouldReportInitial: false,
-        diff: buildDiff(prev, props, opts, renderCountRef.current, equal, true),
+        initialDiff: undefined,
+        diff,
       };
     }
 
-    // 2) Default shallow compare
-    const shallow = getShallowDiff(prev as any, props as any);
+    // Default shallow diff
+    const shallow = safeShallow(prev as T, value);
+    const changedKeys = shallow.changedKeys;
+    const stableKeys = shallow.stableKeys;
 
-    // 3) Optional path-targeted deep compare for watch paths
+    // Watch paths mode: shield based on watched paths equality (deep path compare).
     if (opts.watch && opts.watch.length > 0) {
-      const watched = compareWatchedPaths(prev, props, opts.watch);
+      const watched = compareWatchedPaths(prev as any, value as any, opts.watch);
+      const shielded = watched.watchedEqual;
 
-      // Decision rule:
-      // - If watched paths are equal, we can shield even if unrelated keys changed
-      // - Otherwise, do not shield
-      const equal = watched.watchedEqual;
+      const diff: RenderShieldDiff = {
+        componentName: opts.componentName,
+        shielded,
+        renderCount: renderCountRef.current,
+        changedKeys,
+        stableKeys,
+        watchedChanged: watched.watchedChanged,
+        watchedStable: watched.watchedStable,
+        severity:
+          watched.watchedChanged.length > 0
+            ? "Changed (watched key)"
+            : changedKeys.length > 0
+              ? "Changed (non-UI key)"
+              : "Stable",
+        visual: !!opts.visual,
+      };
 
       return {
-        shielded: equal,
-        nextValue: equal ? prev : props,
+        shielded,
+        nextValue: shielded ? (prev as T) : value,
         shouldReportInitial: false,
-        diff: buildDiff(
-          prev,
-          props,
-          opts,
-          renderCountRef.current,
-          equal,
-          false,
-          shallow,
-          watched
-        ),
+        initialDiff: undefined,
+        diff,
       };
     }
 
-    // No watch paths: shallow equality decides
-    return {
-      shielded: shallow.equal,
-      nextValue: shallow.equal ? prev : props,
-      shouldReportInitial: false,
-      diff: buildDiff(
-        prev,
-        props,
-        opts,
-        renderCountRef.current,
-        shallow.equal,
-        false,
-        shallow
-      ),
+    // Plain shallow equality mode
+    const shielded = shallow.equal;
+
+    const diff: RenderShieldDiff = {
+      componentName: opts.componentName,
+      shielded,
+      renderCount: renderCountRef.current,
+      changedKeys,
+      stableKeys,
+      watchedChanged: [],
+      watchedStable: [],
+      severity: changedKeys.length > 0 ? "Changed (non-UI key)" : "Stable",
+      visual: !!opts.visual,
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props, opts.watch?.join("|"), opts.debug, opts.customCompare]);
 
-  // First render commit: store props AFTER memo runs (same render, safe)
+    return {
+      shielded,
+      nextValue: shielded ? (prev as T) : value,
+      shouldReportInitial: false,
+      initialDiff: undefined,
+      diff,
+    };
+  }, [
+    value,
+    opts.componentName,
+    opts.debug,
+    opts.visual,
+    opts.customCompare,
+    opts.watch?.join("|"),
+  ]);
+
+  // First render
   if (prev === null) {
-    prevRef.current = props;
-
-    if (decided.shouldReportInitial && (decided as any).initialDiff) {
-      report((decided as any).initialDiff);
+    prevRef.current = value;
+    if (evaluation.shouldReportInitial && evaluation.initialDiff) {
+      report(evaluation.initialDiff);
     }
-
-    return props;
+    return value;
   }
 
-  // Debug reporting (non-initial renders)
-  if (opts.debug && (decided as any).diff) {
-    report((decided as any).diff);
+  // Debug reporting (dev-only is handled inside report.ts)
+  if (opts.debug && evaluation.diff) {
+    report(evaluation.diff);
   }
 
-  if (decided.shielded) {
-    // Keep prevRef as-is (shield)
+  // Shielding behavior
+  if (evaluation.shielded) {
+    // keep prev
     return prevRef.current as T;
+  } else {
+    prevRef.current = value;
+    return value;
   }
-
-  // Accept new props
-  prevRef.current = props;
-  return props;
 }
 
-function buildDiff<T>(
-  prev: T,
-  next: T,
-  opts: RenderShieldOptions<T>,
-  renderCount: number,
-  equal: boolean,
-  usedCustom: boolean,
-  shallow?: { changedKeys: string[]; stableKeys: string[] },
-  watched?: { watchedChanged: string[]; watchedStable: string[] }
-): RenderShieldDiff {
-  const changedKeys =
-    shallow?.changedKeys ?? safeTopKeysDiff(prev, next).changedKeys;
-  const stableKeys =
-    shallow?.stableKeys ?? safeTopKeysDiff(prev, next).stableKeys;
-
-  const watchedChanged = watched?.watchedChanged ?? [];
-  const watchedStable = watched?.watchedStable ?? [];
-
-  const severity = usedCustom
-    ? "Custom compare triggered"
-    : watched && watchedChanged.length > 0
-      ? "Changed (watched key)"
-      : changedKeys.length > 0
-        ? "Changed (non-UI key)"
-        : "Stable";
-
-  return {
-    componentName: undefined,
-    shielded: equal,
-    renderCount,
-    changedKeys,
-    stableKeys,
-    watchedChanged,
-    watchedStable,
-    severity,
-  };
-}
-
-function safeTopKeysDiff(prev: any, next: any) {
+function safeShallow(prev: any, next: any) {
   try {
     return getShallowDiff(prev, next);
   } catch {
-    return { equal: false, changedKeys: ["(unavailable)"], stableKeys: [] };
+    return { equal: false, changedKeys: ["(unavailable)"], stableKeys: [] as string[] };
   }
 }
