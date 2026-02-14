@@ -1,71 +1,90 @@
 RenderShield React
+A verification layer for React render decisions.
 
-Stops wasteful rerenders — and tells you why.
+React can skip rerenders.
 
-RenderShield React is a lightweight React utility for identifying and optionally preventing unnecessary rerenders through controlled prop comparison and developer-facing diagnostics.
+But when it does — how do you verify what was actually prevented, and why?
+
+RenderShield React is a lightweight developer instrument that:
+
+Applies structured prop comparison
+
+Allows surgical deep-watching of specific nested paths
+
+Reports why a render was shielded or accepted
 
 It does not mutate props.
 It does not rewrite state.
 It does not guarantee performance gains.
 
-It provides structured comparison and optional visibility into render decisions.
+It exposes the decision boundary.
 
-What It Is
+It prefers doing nothing over doing the wrong thing.
 
-RenderShield React provides:
+Why This Exists
 
-Shallow prop comparison (default)
+Many unnecessary rerenders originate from:
 
-Targeted deep comparison for specific nested paths
+Unstable object references
 
-Optional developer-facing render diagnostics
+Inline functions recreated each render
 
-A hook (useRenderShield)
+Deep state updates unrelated to rendered output
 
-A higher-order component (withRenderShield)
+Parent rerender cascades
 
-It is designed to be explicit, predictable, and minimally invasive.
+AI-generated components that leak references
 
-What It Is Not
+Blindly applying React.memo, useMemo, or useCallback can obscure the underlying cause.
 
-RenderShield React is not:
+RenderShield React is not a magic fix.
 
-A compiler
+It is a visibility instrument.
 
-A code transformation tool
+It helps you answer:
 
-A React internals patch
+Did this render actually need to happen?
 
-A guaranteed performance fix
+Which keys changed?
 
-A full deep-equality engine by default
+Were watched paths stable?
 
-A global runtime modifier
+Was shielding correct?
 
-It favors clarity over automation.
+You don’t guess.
+
+You verify.
 
 Installation
 npm install @lownoise-studio/render-shield-react
 
 Core Hook
-useRenderShield<T>(
-  props: T,
+useRenderShield(
+  value: T,
   options?: {
     watch?: string[];
     debug?: boolean;
+    visual?: boolean;
     customCompare?: (prev: T, next: T) => boolean;
+    componentName?: string;
   }
 )
 
-Default Behavior
+Default Behavior (Shallow Comparison)
 
 By default, the hook performs a shallow comparison of top-level keys.
 
-If no top-level keys changed, the previous reference is returned.
+If no top-level keys changed → previous reference is returned.
 
-If any top-level key changed, the new props are accepted.
+If any top-level key changed → new value is accepted.
 
-No mutation occurs. Original references are preserved.
+No mutation occurs.
+
+Original references are preserved.
+
+Shallow comparison remains O(n) where n is the number of top-level keys.
+
+No hidden recursion.
 
 Watch Paths (Targeted Deep Comparison)
 
@@ -86,7 +105,7 @@ If watched paths are stable, shielding may occur even if unrelated keys changed.
 
 If a watched path changes, shielding is disabled.
 
-This keeps comparison targeted and intentional.
+This keeps comparison surgical and intentional.
 
 Custom Comparator
 
@@ -97,11 +116,15 @@ useRenderShield(props, {
 });
 
 
-If provided, the custom comparator takes precedence.
+If provided:
 
-The comparison logic remains explicit and user-defined.
+The custom comparator takes precedence.
 
-Debug Reporting
+Comparison logic remains explicit and user-defined.
+
+No additional heuristics are applied.
+
+Debug Diagnostics
 
 Enable diagnostic logging:
 
@@ -115,17 +138,54 @@ Console output includes:
 
 Whether shielding occurred
 
+Render count
+
 Changed keys
 
 Stable keys
 
-Watched path results (if applicable)
+Watched path results
 
 Classification severity
 
 Logs are disabled in production builds.
 
-Debug mode is intended for development analysis only.
+Debug mode is strictly for development analysis.
+
+Optional Visual HUD (v0.3+)
+
+You may enable a minimal visual overlay during development:
+
+useRenderShield(props, {
+  watch: ["user.id"],
+  debug: true,
+  visual: true
+});
+
+
+When:
+
+debug === true
+
+visual === true
+
+a render was successfully shielded
+
+A small, temporary development HUD toast appears.
+
+Design constraints:
+
+SSR safe (document guard)
+
+No React lifecycle injection
+
+Single shared DOM node
+
+Auto-removal after ~2 seconds
+
+No global state mutation
+
+This is a development instrument — not a UI system.
 
 Higher-Order Component
 const Shielded = withRenderShield(Component, {
@@ -134,13 +194,19 @@ const Shielded = withRenderShield(Component, {
 });
 
 
-The HOC wraps React.memo and applies the same comparison logic through its comparator.
+The HOC:
 
-It does not modify component behavior.
+Wraps React.memo
 
-It only influences rerender decisions.
+Applies the same comparison logic
 
-It does not inject state or mutate props.
+Does not mutate props
+
+Does not inject state
+
+Does not modify component behavior
+
+It influences rerender decisions only.
 
 Severity Classification
 
@@ -154,13 +220,59 @@ Changed (watched key)
 
 Custom compare triggered
 
-These classifications are informational and do not alter runtime behavior.
+These classifications are informational.
+
+They do not alter runtime behavior.
+
+Example: The Invisible Cascade
+
+A parent updates user.lastActive every 800ms.
+
+Your component only depends on user.id.
+
+Without structured comparison, rerenders may cascade silently.
+
+With RenderShield:
+
+useRenderShield(props, {
+  watch: ["user.id"],
+  debug: true
+});
+
+
+Only user.id is deep-compared.
+
+Unrelated changes are classified and reported.
+
+You don’t guess.
+
+You verify.
+
+What It Is Not
+
+RenderShield React is not:
+
+A compiler
+
+A code transformation tool
+
+A React internals patch
+
+A guaranteed performance fix
+
+A global runtime modifier
+
+A full deep-equality engine by default
+
+It favors clarity over automation.
+
+It prefers explicit control over hidden behavior.
 
 Design Constraints
 
 RenderShield React:
 
-Is React 18 compatible
+Is React 18+ compatible
 
 Does not rely on experimental APIs
 
@@ -172,37 +284,33 @@ Does not introduce global side effects
 
 Avoids deep recursion unless explicitly requested
 
-Shallow comparison remains O(n), where n is the number of top-level keys.
-
-Philosophy
-
-Many unnecessary rerenders originate from:
-
-Unstable object references
-
-Inline functions
-
-Deep state updates unrelated to rendered output
-
-Parent rerender cascades
-
-Blindly applying memo or useCallback can obscure the underlying cause.
-
-RenderShield React encourages:
-
-Structured comparison
-
-Explicit targeting
-
-Optional diagnostics
-
-Predictable behavior
+Keeps shallow comparison O(n)
 
 It prefers doing nothing over doing the wrong thing.
 
+Intended Use Cases
+
+RenderShield React works best when:
+
+Diagnosing rerender cascades
+
+Auditing AI-generated components
+
+Verifying React.memo effectiveness
+
+Validating watch-path stability
+
+Building controlled component boundaries
+
+Teaching render mechanics to teams
+
+It is a diagnostic surface.
+
+Not an optimization promise.
+
 Status
 
-v0.1
+v0.2.x
 
 Core hook stable
 
@@ -212,9 +320,14 @@ Watch-path targeting validated
 
 Type-safe
 
-Tested
+Tests passing
 
-Future versions may explore extended diagnostics or tooling layers, but v0 focuses strictly on comparison mechanics.
+CJS, ESM, and DTS builds
+
+v0.3.x introduces optional visual development HUD support.
+
+Future versions may explore extended diagnostics or tooling layers.
+The core remains intentionally conservative.
 
 License
 
