@@ -8,5 +8,5 @@ export default defineConfig({
   sourcemap: false,
   clean: true,
   minify: true,
-  external: ["react"],
+  external: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
 });
