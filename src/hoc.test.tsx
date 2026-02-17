@@ -102,4 +102,42 @@ describe("withRenderShield HOC", () => {
     logSpy.mockRestore();
     process.env.NODE_ENV = originalEnv;
   });
+
+  it("should pass through contract to diagnostics", async () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "development";
+
+    const groupSpy = vi
+      .spyOn(console, "groupCollapsed")
+      .mockImplementation(() => {});
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const contract = {
+      watch: ["id"],
+      description: "Component only cares about user ID",
+    };
+
+    const Base = (props: { id: number; name: string }) => {
+      return <div>{props.id}</div>;
+    };
+
+    const Shielded = withRenderShield(Base, {
+      watch: ["id"],
+      debug: true,
+      contract,
+    });
+
+    const { rerender } = render(<Shielded id={1} name="Test" />);
+    rerender(<Shielded id={1} name="Test2" />);
+
+    await flushMicrotasks();
+
+    // Verify contract info appears in logs
+    const logCalls = logSpy.mock.calls.flat().join(" ");
+    expect(logCalls).toContain("Contract");
+
+    groupSpy.mockRestore();
+    logSpy.mockRestore();
+    process.env.NODE_ENV = originalEnv;
+  });
 });

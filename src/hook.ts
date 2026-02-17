@@ -42,6 +42,7 @@ export function useRenderShield<T>(value: T, options?: RenderShieldOptions<T>): 
         watchedStable: opts.watch ?? [],
         severity: "Stable",
         visual: !!opts.visual,
+        contract: opts.contract,
       };
 
       return {
@@ -67,6 +68,7 @@ export function useRenderShield<T>(value: T, options?: RenderShieldOptions<T>): 
         watchedStable: opts.watch ?? [],
         severity: "Custom compare triggered",
         visual: !!opts.visual,
+        contract: opts.contract,
       };
 
       return {
@@ -103,6 +105,7 @@ export function useRenderShield<T>(value: T, options?: RenderShieldOptions<T>): 
               ? "Changed (non-UI key)"
               : "Stable",
         visual: !!opts.visual,
+        contract: opts.contract,
       };
 
       return {
@@ -127,6 +130,7 @@ export function useRenderShield<T>(value: T, options?: RenderShieldOptions<T>): 
       watchedStable: [],
       severity: changedKeys.length > 0 ? "Changed (non-UI key)" : "Stable",
       visual: !!opts.visual,
+      contract: opts.contract,
     };
 
     return {
@@ -141,6 +145,8 @@ export function useRenderShield<T>(value: T, options?: RenderShieldOptions<T>): 
     opts.componentName,
     opts.debug,
     opts.visual,
+    opts.shield,
+    opts.contract,
     opts.customCompare,
     opts.watch?.join("|"),
   ]);
@@ -160,7 +166,10 @@ export function useRenderShield<T>(value: T, options?: RenderShieldOptions<T>): 
   }
 
   // Shielding behavior
-  if (evaluation.shielded) {
+  // If shield: false, always return current value (diagnostics-only mode)
+  const shouldShield = opts.shield !== false && evaluation.shielded;
+
+  if (shouldShield) {
     // keep prev
     return prevRef.current as T;
   } else {

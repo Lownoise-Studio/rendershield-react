@@ -26,6 +26,7 @@ export function withRenderShield<P extends object>(
           watchedChanged: [],
           watchedStable: [],
           severity: "Custom compare triggered",
+          contract: opts.contract,
         });
       }
 
@@ -53,6 +54,7 @@ export function withRenderShield<P extends object>(
               : shallow.changedKeys.length > 0
                 ? "Changed (non-UI key)"
                 : "Stable",
+          contract: opts.contract,
         });
       }
 
@@ -69,6 +71,7 @@ export function withRenderShield<P extends object>(
         watchedChanged: [],
         watchedStable: [],
         severity: shallow.changedKeys.length > 0 ? "Changed (non-UI key)" : "Stable",
+        contract: opts.contract,
       });
     }
 
