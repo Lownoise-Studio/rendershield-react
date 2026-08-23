@@ -68,6 +68,10 @@ export type RenderShieldOptions<T> = {
     description?: string;
   };
 
+  /**
+   * Custom equality comparator. Same contract as React.memo:
+   * return `true` when prev and next are considered equal (shield / prevent rerender).
+   */
   customCompare?: (prev: T, next: T) => boolean;
 
   /**

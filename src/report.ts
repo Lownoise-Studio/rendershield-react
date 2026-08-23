@@ -43,6 +43,7 @@ let isBatching = false;
 const componentHistory: Map<string, RenderShieldDiff[]> = new Map();
 const MAX_HISTORY = 10;
 const MAX_COMPONENTS = 100; // Prevent unbounded growth: limit to 100 unique components
+const hookWarningsShown = new Set<string>();
 
 /**
  * Clean up old component history entries to prevent memory leaks.
@@ -61,6 +62,15 @@ function cleanupHistory() {
       componentHistory.delete(key);
     }
   }
+}
+
+/**
+ * Track evaluation history without emitting console output.
+ * Used by the hook to build recommendation patterns while deduping logs.
+ */
+export function trackShieldEvaluation(diff: RenderShieldDiff) {
+  if (isProd()) return;
+  trackHistory(diff);
 }
 
 /**
@@ -179,17 +189,11 @@ function generateRecommendations(diff: RenderShieldDiff): string[] {
   }
   
   // Contract drift detection
-  if (diff.contract && diff.contract.watch.length > 0) {
-    const contractWatchSet = new Set(diff.contract.watch);
-    const contractMismatch = diff.changedKeys.filter(
-      (key) => !contractWatchSet.has(key)
+  const contractDrift = getContractDriftKeys(diff);
+  if (contractDrift.length > 0) {
+    recommendations.push(
+      `Contract specifies [${diff.contract!.watch.join(", ")}] but [${contractDrift.join(", ")}] changed`
     );
-    
-    if (contractMismatch.length > 0) {
-      recommendations.push(
-        `Contract specifies [${diff.contract.watch.join(", ")}] but [${contractMismatch.join(", ")}] changed`
-      );
-    }
   }
   
   return recommendations;
@@ -239,8 +243,8 @@ function renderLog(diff: RenderShieldDiff) {
       // Remind that hook doesn't prevent component execution
       // Only show once per component to avoid noise
       const warningKey = `hook-warning-${diff.componentName ?? "anonymous"}`;
-      if (typeof window !== "undefined" && !(window as any)[warningKey]) {
-        (window as any)[warningKey] = true;
+      if (!hookWarningsShown.has(warningKey)) {
+        hookWarningsShown.add(warningKey);
         console.info(
           `ℹ️ Note: useRenderShield returned a previous value (shielding), but the component still executed (render #${diff.renderCount}). ` +
             `The hook stabilizes the value for downstream consumers but does NOT prevent component rerenders. ` +
@@ -251,11 +255,8 @@ function renderLog(diff: RenderShieldDiff) {
 
     // Contract compliance (only if contract exists)
     if (diff.contract) {
-      const contractWatchSet = new Set(diff.contract.watch);
-      const contractMismatch = diff.changedKeys.filter(
-        (key) => !contractWatchSet.has(key)
-      );
-      const contractCompliant = contractMismatch.length === 0;
+      const contractDrift = getContractDriftKeys(diff);
+      const contractCompliant = contractDrift.length === 0;
       
       console.log(
         `Contract: ${contractCompliant ? "✓ Compliant" : "⚠ Drift"} (specifies: [${diff.contract.watch.join(", ")}])`
@@ -420,11 +421,9 @@ function escapeHtml(input: string): string {
  * This key aims to collapse genuinely duplicated logs within a micro-task
  * while avoiding accidental overwrites of unrelated anonymous reports.
  */
-function buildBatchKey(diff: RenderShieldDiff): string {
+export function getReportBatchKey(diff: RenderShieldDiff): string {
   const base = diff.componentName ?? "Anonymous";
 
-  // Include minimal, factual signature of the report.
-  // This is not "magic": it is derived from the report content itself.
   const signature = [
     diff.shielded ? "S1" : "S0",
     diff.severity,
@@ -434,4 +433,56 @@ function buildBatchKey(diff: RenderShieldDiff): string {
   ].join(":");
 
   return `${base}::${signature}`;
+}
+
+function buildBatchKey(diff: RenderShieldDiff): string {
+  return getReportBatchKey(diff);
+}
+
+function getContractTopLevelKeys(watchPaths: string[]): Set<string> {
+  const keys = new Set<string>();
+  for (const path of watchPaths) {
+    const first = path.replace(/\[(\d+)\]/g, ".$1").split(".").filter(Boolean)[0];
+    if (first) keys.add(first);
+  }
+  return keys;
+}
+
+function getContractDriftKeys(diff: RenderShieldDiff): string[] {
+  if (!diff.contract || diff.contract.watch.length === 0) return [];
+
+  const contractPathSet = new Set(diff.contract.watch);
+  const topLevelKeys = getContractTopLevelKeys(diff.contract.watch);
+  const drift: string[] = [];
+
+  for (const key of diff.changedKeys) {
+    if (!topLevelKeys.has(key)) {
+      drift.push(key);
+    }
+  }
+
+  for (const path of diff.watchedChanged) {
+    if (contractPathSet.has(path) && !drift.includes(path)) {
+      drift.push(path);
+    }
+  }
+
+  return drift;
+}
+
+/** @internal Reset module state between tests. */
+export function resetReportStateForTests() {
+  pendingReports.clear();
+  isBatching = false;
+  componentHistory.clear();
+  hookWarningsShown.clear();
+}
+
+/** @internal Whether history has enough signal to emit recommendations for this diff. */
+export function shouldSurfaceRecommendations(diff: RenderShieldDiff): boolean {
+  if (isProd()) return false;
+  const componentKey = diff.componentName ?? "Anonymous";
+  const history = componentHistory.get(componentKey) ?? [];
+  if (history.length < 3) return false;
+  return generateRecommendations(diff).length > 0;
 }

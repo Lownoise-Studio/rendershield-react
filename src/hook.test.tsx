@@ -1,12 +1,22 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { useRenderShield } from "./hook";
+import { resetReportStateForTests } from "./report";
 
 async function flushMicrotasks() {
   await Promise.resolve();
 }
 
 describe("useRenderShield Hook", () => {
+  beforeEach(() => {
+    resetReportStateForTests();
+  });
+
+  afterEach(async () => {
+    await flushMicrotasks();
+    resetReportStateForTests();
+  });
+
   it("should return the original reference if watched keys are stable", () => {
     const initialProps = { id: 1, metadata: { lastUpdated: "10:00" } };
     const nextProps = { id: 1, metadata: { lastUpdated: "10:05" } };
@@ -140,8 +150,6 @@ describe("useRenderShield Hook", () => {
       }
     );
 
-    // Trigger multiple renders with non-watched key changing
-    // Need at least 3 renders to trigger recommendation threshold
     for (let i = 1; i <= 4; i++) {
       rerender({
         p: { id: 1, metadata: { lastUpdated: `10:0${i}` } },
@@ -149,11 +157,8 @@ describe("useRenderShield Hook", () => {
       await flushMicrotasks();
     }
 
-    // Check if recommendations section appears
-    // After 3+ renders with same pattern, recommendations should be generated
     const logCalls = logSpy.mock.calls.flat().join(" ");
-    
-    // Verify recommendations appear (either "Recommendations" section or "Consider watching" text)
+
     expect(
       logCalls.includes("Recommendations") || logCalls.includes("Consider watching")
     ).toBe(true);
@@ -161,6 +166,34 @@ describe("useRenderShield Hook", () => {
     groupSpy.mockRestore();
     logSpy.mockRestore();
     groupEndSpy.mockRestore();
+    process.env.NODE_ENV = originalEnv;
+  });
+
+  it("should not repeat debug reports when value reference is unchanged", async () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "development";
+
+    const groupSpy = vi
+      .spyOn(console, "groupCollapsed")
+      .mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "groupEnd").mockImplementation(() => {});
+
+    const stableProps = { id: 1 };
+    const options = { watch: ["id"], debug: true, componentName: "NoRepeatTest" };
+
+    const { rerender } = renderHook(
+      ({ p }) => useRenderShield(p, options),
+      { initialProps: { p: stableProps } }
+    );
+
+    rerender({ p: stableProps });
+    rerender({ p: stableProps });
+    await flushMicrotasks();
+
+    expect(groupSpy).toHaveBeenCalledTimes(2);
+
+    groupSpy.mockRestore();
     process.env.NODE_ENV = originalEnv;
   });
 });

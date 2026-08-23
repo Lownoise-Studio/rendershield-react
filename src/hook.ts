@@ -1,10 +1,10 @@
 // src/hook.ts
 
-import { useMemo, useRef } from "react";
+import { useRef } from "react";
 import type { RenderShieldDiff, RenderShieldOptions } from "./types";
 import { getShallowDiff } from "./shallowCompare";
 import { compareWatchedPaths } from "./pathCompare";
-import { report } from "./report";
+import { report, getReportBatchKey, trackShieldEvaluation, shouldSurfaceRecommendations } from "./report";
 
 /**
  * useRenderShield
@@ -20,48 +20,95 @@ export function useRenderShield<T>(value: T, options?: RenderShieldOptions<T>): 
 
   const prevRef = useRef<T | null>(null);
   const renderCountRef = useRef(0);
-  renderCountRef.current += 1;
+  const lastReportKeyRef = useRef<string | null>(null);
+  const recommendationsSurfacedRef = useRef(false);
 
+  renderCountRef.current += 1;
+  const renderCount = renderCountRef.current;
   const prev = prevRef.current;
 
-  const evaluation = useMemo(() => {
-    // Initial render: do not shield.
-    if (prev === null) {
-      const stableKeys =
-        value && typeof value === "object"
-          ? Object.keys(value as any)
-          : [];
-
-      const initialDiff: RenderShieldDiff = {
-        componentName: opts.componentName,
-        shielded: false,
-        renderCount: renderCountRef.current,
-        changedKeys: [],
-        stableKeys,
-        watchedChanged: [],
-        watchedStable: opts.watch ?? [],
-        severity: "Stable",
-        visual: !!opts.visual,
-        contract: opts.contract,
-      };
-
-      return {
-        shielded: false,
-        nextValue: value,
-        shouldReportInitial: !!opts.debug,
-        initialDiff,
-        diff: undefined as RenderShieldDiff | undefined,
-      };
+  if (prev === null) {
+    prevRef.current = value;
+    if (opts.debug) {
+      reportDiffIfNew(buildInitialDiff(value, opts, renderCount), lastReportKeyRef, recommendationsSurfacedRef);
     }
+    return value;
+  }
 
-    // Custom comparator path
-    if (typeof opts.customCompare === "function") {
-      const shielded = opts.customCompare(prev as T, value);
+  const evaluation = evaluateShield(prev, value, opts, renderCount);
 
-      const diff: RenderShieldDiff = {
+  if (opts.debug && evaluation.diff) {
+    reportDiffIfNew(evaluation.diff, lastReportKeyRef, recommendationsSurfacedRef);
+  }
+
+  const shouldShield = opts.shield !== false && evaluation.shielded;
+
+  if (shouldShield) {
+    return prevRef.current as T;
+  }
+
+  prevRef.current = value;
+  return value;
+}
+
+function reportDiffIfNew(
+  diff: RenderShieldDiff,
+  lastReportKeyRef: { current: string | null },
+  recommendationsSurfacedRef: { current: boolean }
+) {
+  trackShieldEvaluation(diff);
+
+  const key = getReportBatchKey(diff);
+  const surfaceRecommendations =
+    !recommendationsSurfacedRef.current && shouldSurfaceRecommendations(diff);
+
+  if (lastReportKeyRef.current === key && !surfaceRecommendations) return;
+
+  if (surfaceRecommendations) {
+    recommendationsSurfacedRef.current = true;
+  }
+
+  lastReportKeyRef.current = key;
+  report(diff);
+}
+
+function buildInitialDiff<T>(
+  value: T,
+  opts: RenderShieldOptions<T>,
+  renderCount: number
+): RenderShieldDiff {
+  const stableKeys =
+    value && typeof value === "object" ? Object.keys(value as object) : [];
+
+  return {
+    componentName: opts.componentName,
+    shielded: false,
+    renderCount,
+    changedKeys: [],
+    stableKeys,
+    watchedChanged: [],
+    watchedStable: opts.watch ?? [],
+    severity: "Stable",
+    visual: !!opts.visual,
+    contract: opts.contract,
+  };
+}
+
+function evaluateShield<T>(
+  prev: T,
+  value: T,
+  opts: RenderShieldOptions<T>,
+  renderCount: number
+): { shielded: boolean; diff: RenderShieldDiff } {
+  if (typeof opts.customCompare === "function") {
+    const shielded = opts.customCompare(prev, value);
+
+    return {
+      shielded,
+      diff: {
         componentName: opts.componentName,
         shielded,
-        renderCount: renderCountRef.current,
+        renderCount,
         changedKeys: [],
         stableKeys: [],
         watchedChanged: [],
@@ -69,31 +116,23 @@ export function useRenderShield<T>(value: T, options?: RenderShieldOptions<T>): 
         severity: "Custom compare triggered",
         visual: !!opts.visual,
         contract: opts.contract,
-      };
+      },
+    };
+  }
 
-      return {
-        shielded,
-        nextValue: shielded ? (prev as T) : value,
-        shouldReportInitial: false,
-        initialDiff: undefined,
-        diff,
-      };
-    }
+  const shallow = safeShallow(prev, value);
+  const { changedKeys, stableKeys } = shallow;
 
-    // Default shallow diff
-    const shallow = safeShallow(prev as T, value);
-    const changedKeys = shallow.changedKeys;
-    const stableKeys = shallow.stableKeys;
+  if (opts.watch && opts.watch.length > 0) {
+    const watched = compareWatchedPaths(prev, value, opts.watch);
+    const shielded = watched.watchedEqual;
 
-    // Watch paths mode: shield based on watched paths equality (deep path compare).
-    if (opts.watch && opts.watch.length > 0) {
-      const watched = compareWatchedPaths(prev as any, value as any, opts.watch);
-      const shielded = watched.watchedEqual;
-
-      const diff: RenderShieldDiff = {
+    return {
+      shielded,
+      diff: {
         componentName: opts.componentName,
         shielded,
-        renderCount: renderCountRef.current,
+        renderCount,
         changedKeys,
         stableKeys,
         watchedChanged: watched.watchedChanged,
@@ -106,24 +145,18 @@ export function useRenderShield<T>(value: T, options?: RenderShieldOptions<T>): 
               : "Stable",
         visual: !!opts.visual,
         contract: opts.contract,
-      };
+      },
+    };
+  }
 
-      return {
-        shielded,
-        nextValue: shielded ? (prev as T) : value,
-        shouldReportInitial: false,
-        initialDiff: undefined,
-        diff,
-      };
-    }
+  const shielded = shallow.equal;
 
-    // Plain shallow equality mode
-    const shielded = shallow.equal;
-
-    const diff: RenderShieldDiff = {
+  return {
+    shielded,
+    diff: {
       componentName: opts.componentName,
       shielded,
-      renderCount: renderCountRef.current,
+      renderCount,
       changedKeys,
       stableKeys,
       watchedChanged: [],
@@ -131,54 +164,11 @@ export function useRenderShield<T>(value: T, options?: RenderShieldOptions<T>): 
       severity: changedKeys.length > 0 ? "Changed (non-UI key)" : "Stable",
       visual: !!opts.visual,
       contract: opts.contract,
-    };
-
-    return {
-      shielded,
-      nextValue: shielded ? (prev as T) : value,
-      shouldReportInitial: false,
-      initialDiff: undefined,
-      diff,
-    };
-  }, [
-    value,
-    opts.componentName,
-    opts.debug,
-    opts.visual,
-    opts.shield,
-    opts.contract,
-    opts.customCompare,
-    opts.watch?.join("|"),
-  ]);
-
-  // First render
-  if (prev === null) {
-    prevRef.current = value;
-    if (evaluation.shouldReportInitial && evaluation.initialDiff) {
-      report(evaluation.initialDiff);
-    }
-    return value;
-  }
-
-  // Debug reporting (dev-only is handled inside report.ts)
-  if (opts.debug && evaluation.diff) {
-    report(evaluation.diff);
-  }
-
-  // Shielding behavior
-  // If shield: false, always return current value (diagnostics-only mode)
-  const shouldShield = opts.shield !== false && evaluation.shielded;
-
-  if (shouldShield) {
-    // keep prev
-    return prevRef.current as T;
-  } else {
-    prevRef.current = value;
-    return value;
-  }
+    },
+  };
 }
 
-function safeShallow(prev: any, next: any) {
+function safeShallow(prev: unknown, next: unknown) {
   try {
     return getShallowDiff(prev, next);
   } catch {

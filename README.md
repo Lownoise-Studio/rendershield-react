@@ -208,6 +208,8 @@ If provided:
 
 The custom comparator takes precedence.
 
+Return `true` when `prev` and `next` are considered equal (same contract as `React.memo` — equal means shield / prevent rerender).
+
 Comparison logic remains explicit and user-defined.
 
 No additional heuristics are applied.

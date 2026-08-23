@@ -1,13 +1,23 @@
 import React from "react";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render } from "@testing-library/react";
 import { withRenderShield } from "./hoc";
+import { resetReportStateForTests } from "./report";
 
 async function flushMicrotasks() {
   await Promise.resolve();
 }
 
 describe("withRenderShield HOC", () => {
+  beforeEach(() => {
+    resetReportStateForTests();
+  });
+
+  afterEach(async () => {
+    await flushMicrotasks();
+    resetReportStateForTests();
+  });
+
   it("should NOT rerender the wrapped component when watched paths are stable (shielded)", () => {
     let renders = 0;
 
@@ -138,6 +148,61 @@ describe("withRenderShield HOC", () => {
 
     groupSpy.mockRestore();
     logSpy.mockRestore();
+    process.env.NODE_ENV = originalEnv;
+  });
+
+  it("should rerender when shield is false even if comparison would shield", () => {
+    let renders = 0;
+
+    const Base = (props: { id: number; metadata: { lastUpdated: string } }) => {
+      renders += 1;
+      return (
+        <div>
+          {props.id} - {props.metadata.lastUpdated}
+        </div>
+      );
+    };
+
+    const Shielded = withRenderShield(Base, { watch: ["id"], shield: false });
+
+    const initialProps = { id: 1, metadata: { lastUpdated: "10:00" } };
+    const nextProps = { id: 1, metadata: { lastUpdated: "10:05" } };
+
+    const { rerender } = render(<Shielded {...initialProps} />);
+    expect(renders).toBe(1);
+
+    rerender(<Shielded {...nextProps} />);
+    expect(renders).toBe(2);
+  });
+
+  it("should pass visual flag through to diagnostics", async () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "development";
+
+    const appendSpy = vi.spyOn(document.body, "appendChild");
+    vi.spyOn(console, "groupCollapsed").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "groupEnd").mockImplementation(() => {});
+
+    const Base = (props: { id: number; metadata?: { lastUpdated: string } }) => (
+      <div>{props.id}</div>
+    );
+    const Shielded = withRenderShield(Base, {
+      watch: ["id"],
+      debug: true,
+      visual: true,
+    });
+
+    const { rerender } = render(<Shielded id={1} />);
+    rerender(<Shielded id={1} metadata={{ lastUpdated: "10:05" }} />);
+    await flushMicrotasks();
+
+    const toast = appendSpy.mock.calls
+      .map((call) => call[0] as HTMLElement)
+      .find((node) => node.id === "render-shield-toast");
+
+    expect(toast).toBeTruthy();
+    toast?.remove();
     process.env.NODE_ENV = originalEnv;
   });
 });

@@ -24,8 +24,10 @@ Global behavior modification
 RenderShield is a developer instrument — not an optimization engine.
 Development Setup
 Clone the repository
-Install dependencies
-Run the demo or example app
+Install dependencies: npm install
+Run tests: npm test
+Run the build: npm run build
+Review DEMO.md for a manual verification checklist
 Ensure changes do not alter the public API without discussion
 All changes should be predictable and minimal.
 Pull Request Guidelines

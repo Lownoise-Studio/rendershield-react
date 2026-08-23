@@ -1,5 +1,5 @@
 import React from "react";
-import type { RenderShieldOptions } from "./types";
+import type { RenderShieldDiff, RenderShieldOptions } from "./types";
 import { getShallowDiff } from "./shallowCompare";
 import { compareWatchedPaths } from "./pathCompare";
 import { report } from "./report";
@@ -12,72 +12,90 @@ export function withRenderShield<P extends object>(
   const name = Component.displayName || Component.name || "Component";
 
   const Memo = React.memo(Component, (prevProps, nextProps) => {
-    // Custom comparator wins (user-owned)
-    if (typeof opts.customCompare === "function") {
-      const equal = opts.customCompare(prevProps, nextProps);
-
-      if (opts.debug) {
-        report({
-          componentName: name,
-          shielded: equal,
-          renderCount: NaN, // comparator is not a render, so we avoid lying
-          changedKeys: [],
-          stableKeys: [],
-          watchedChanged: [],
-          watchedStable: [],
-          severity: "Custom compare triggered",
-          contract: opts.contract,
-        });
-      }
-
-      return equal;
-    }
-
-    const shallow = getShallowDiff(prevProps, nextProps);
-
-    if (opts.watch && opts.watch.length > 0) {
-      const watched = compareWatchedPaths(prevProps, nextProps, opts.watch);
-      const equal = watched.watchedEqual;
-
-      if (opts.debug) {
-        report({
-          componentName: name,
-          shielded: equal,
-          renderCount: NaN,
-          changedKeys: shallow.changedKeys,
-          stableKeys: shallow.stableKeys,
-          watchedChanged: watched.watchedChanged,
-          watchedStable: watched.watchedStable,
-          severity:
-            watched.watchedChanged.length > 0
-              ? "Changed (watched key)"
-              : shallow.changedKeys.length > 0
-                ? "Changed (non-UI key)"
-                : "Stable",
-          contract: opts.contract,
-        });
-      }
-
-      return equal;
-    }
+    const comparison = evaluateProps(prevProps, nextProps, opts, name);
 
     if (opts.debug) {
-      report({
-        componentName: name,
-        shielded: shallow.equal,
-        renderCount: NaN,
-        changedKeys: shallow.changedKeys,
-        stableKeys: shallow.stableKeys,
-        watchedChanged: [],
-        watchedStable: [],
-        severity: shallow.changedKeys.length > 0 ? "Changed (non-UI key)" : "Stable",
-        contract: opts.contract,
-      });
+      report(comparison.diff);
     }
 
-    return shallow.equal;
+    if (opts.shield === false) {
+      return false;
+    }
+
+    return comparison.equal;
   });
 
   Memo.displayName = `withRenderShield(${name})`;
   return Memo;
+}
+
+function evaluateProps<P extends object>(
+  prevProps: P,
+  nextProps: P,
+  opts: RenderShieldOptions<P>,
+  name: string
+): { equal: boolean; diff: RenderShieldDiff } {
+  if (typeof opts.customCompare === "function") {
+    const equal = opts.customCompare(prevProps, nextProps);
+
+    return {
+      equal,
+      diff: {
+        componentName: name,
+        shielded: equal,
+        renderCount: NaN,
+        changedKeys: [],
+        stableKeys: [],
+        watchedChanged: [],
+        watchedStable: [],
+        severity: "Custom compare triggered",
+        visual: !!opts.visual,
+        contract: opts.contract,
+      },
+    };
+  }
+
+  const shallow = getShallowDiff(prevProps, nextProps);
+
+  if (opts.watch && opts.watch.length > 0) {
+    const watched = compareWatchedPaths(prevProps, nextProps, opts.watch);
+    const equal = watched.watchedEqual;
+
+    return {
+      equal,
+      diff: {
+        componentName: name,
+        shielded: equal,
+        renderCount: NaN,
+        changedKeys: shallow.changedKeys,
+        stableKeys: shallow.stableKeys,
+        watchedChanged: watched.watchedChanged,
+        watchedStable: watched.watchedStable,
+        severity:
+          watched.watchedChanged.length > 0
+            ? "Changed (watched key)"
+            : shallow.changedKeys.length > 0
+              ? "Changed (non-UI key)"
+              : "Stable",
+        visual: !!opts.visual,
+        contract: opts.contract,
+      },
+    };
+  }
+
+  return {
+    equal: shallow.equal,
+    diff: {
+      componentName: name,
+      shielded: shallow.equal,
+      renderCount: NaN,
+      changedKeys: shallow.changedKeys,
+      stableKeys: shallow.stableKeys,
+      watchedChanged: [],
+      watchedStable: [],
+      severity: shallow.changedKeys.length > 0 ? "Changed (non-UI key)" : "Stable",
+      visual: !!opts.visual,
+      contract: opts.contract,
+    },
+  };
 }
