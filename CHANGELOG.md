@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Documentation
+- Rewrite README as accurate Markdown for the open-source RenderShield React product boundary.
+- Clarify separation from RenderShield Prerender; no package coupling.
+- Update CONTRIBUTING and SECURITY for current scripts and GitHub private vulnerability reporting.
+
+### Added
+- Packaging smoke test (`npm run test:packaging`) for pack → clean consumer → ESM/CJS/types.
+- CI matrix for Node 18, 20, and 22, plus a Node 20 packaging-smoke job and production audit.
+- Compatibility tests for package identity, public exports, staleness contract, Strict Mode, SSR HUD safety, and production gating.
+
+### Changed
+- Prefer locally installed binaries in npm scripts (`tsup`, `vitest`, `tsc`).
+- Expand package keywords for discoverability without changing package identity or version.
+
 ## [1.0.0] - 2026-08-23
 
 ### Fixed
