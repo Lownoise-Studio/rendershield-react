@@ -17,7 +17,7 @@ All notable changes to this project are documented in this file.
 ### Changed
 - Prefer locally installed binaries in npm scripts (`tsup`, `vitest`, `tsc`).
 - Expand package keywords for discoverability without changing package identity or version.
-- Pin Vitest to v3 so CI can run on Node 18 (Vitest 4 requires Node 20+ `util.styleText`).
+- Pin Vitest to v3 and Vite to v5 so CI can run on Node 18 (newer Vitest/Vite tooling requires Node 20+).
 
 ## [1.0.0] - 2026-08-23
 
