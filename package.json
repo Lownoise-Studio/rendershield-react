@@ -1,20 +1,28 @@
 {
     "name": "@lownoise-studio/render-shield-react",
     "version": "1.0.0",
-    "description": "Lightweight React render diff shielding with structured diagnostics.",
+    "description": "Open-source React render-boundary diagnostics and shielding library.",
     "license": "MIT",
     "sideEffects": false,
     "repository": {
         "type": "git",
-        "url": "https://github.com/Lownoise-Studio/rendershield-react.git"
+        "url": "git+https://github.com/Lownoise-Studio/rendershield-react.git"
     },
+    "bugs": {
+        "url": "https://github.com/Lownoise-Studio/rendershield-react/issues"
+    },
+    "homepage": "https://github.com/Lownoise-Studio/rendershield-react#readme",
     "keywords": [
         "react",
-        "render",
-        "memo",
-        "performance",
+        "react-performance",
+        "rerender",
+        "diagnostics",
+        "react-memo",
+        "hooks",
+        "typescript",
         "devtools",
-        "diagnostics"
+        "render",
+        "memo"
     ],
     "main": "dist/index.js",
     "module": "dist/index.mjs",
@@ -32,10 +40,11 @@
         "LICENSE"
     ],
     "scripts": {
-        "build": "npx tsup",
-        "dev": "npx tsup --watch",
+        "build": "tsup",
+        "dev": "tsup --watch",
         "test": "vitest",
         "test:run": "vitest run",
+        "test:packaging": "node scripts/packaging-smoke.mjs",
         "typecheck": "tsc --noEmit",
         "prepublishOnly": "npm run typecheck && npm run test:run && npm run build"
     },
@@ -43,15 +52,16 @@
         "react": ">=18"
     },
     "devDependencies": {
+        "@testing-library/dom": "^10.0.0",
+        "@testing-library/react": "^16.0.0",
         "@types/node": "^22.0.0",
         "@types/react": "^19.0.0",
-        "tsup": "^8.0.0",
-        "vitest": "^4.0.0",
-        "@testing-library/react": "^16.0.0",
-        "@testing-library/dom": "^10.0.0",
-        "jsdom": "^29.0.0",
+        "jsdom": "^24.1.3",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
-        "typescript": "^5.8.0"
+        "tsup": "^8.0.0",
+        "typescript": "^5.8.0",
+        "vite": "^5.4.21",
+        "vitest": "^3.2.7"
     }
 }
