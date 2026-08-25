@@ -183,7 +183,7 @@ Package entry points: CJS (`dist/index.js`), ESM (`dist/index.mjs`), types (`dis
 | Environment | Support |
 | --- | --- |
 | React | Peer `>=18` (dev tests use React 19) |
-| Node (CI / tooling) | 18, 20, 22 (Vitest 3 + Vite 5 pinned for Node 18) |
+| Node (CI / tooling) | 18, 20, 22 (Vitest 3 + Vite 5 + jsdom 24 pinned for Node 18) |
 | Bundlers | Dual CJS + ESM |
 
 ## Limitations / what it is not
