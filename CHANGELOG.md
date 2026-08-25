@@ -10,9 +10,9 @@ All notable changes to this project are documented in this file.
 - Update CONTRIBUTING and SECURITY for current scripts and GitHub private vulnerability reporting.
 
 ### Added
-- Packaging smoke test (`npm run test:packaging`) for pack → clean consumer → ESM/CJS/types.
+- Packaging smoke test (`npm run test:packaging`) for pack → clean consumer → ESM/CJS/types, covering React 18 and React 19 peers.
 - CI matrix for Node 18, 20, and 22, plus a Node 20 packaging-smoke job and production audit.
-- Compatibility tests for package identity, public exports, staleness contract, Strict Mode, SSR HUD safety, and production gating.
+- Compatibility tests for package identity, public exports (source barrel), staleness contract, Strict Mode, SSR HUD safety, and production gating.
 
 ### Changed
 - Prefer locally installed binaries in npm scripts (`tsup`, `vitest`, `tsc`).

@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import React, { StrictMode } from "react";
 import { render, renderHook } from "@testing-library/react";
 import {
@@ -18,7 +17,6 @@ import { report, resetReportStateForTests } from "./report";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
-const require = createRequire(import.meta.url);
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 
 async function flushMicrotasks() {
@@ -54,36 +52,7 @@ describe("public exports", () => {
     expect(typeof getAtPath).toBe("function");
     expect(typeof deepEqual).toBe("function");
   });
-
-  it("loads ESM and CJS built entries with the same export names", async () => {
-    const esm = await import(pathToFileURL(join(root, "dist/index.mjs")).href);
-    const cjs = require(join(root, "dist/index.js"));
-
-    const expected = [
-      "useRenderShield",
-      "useRenderShieldReport",
-      "withRenderShield",
-      "getShallowDiff",
-      "compareWatchedPaths",
-      "getAtPath",
-      "deepEqual",
-    ];
-
-    for (const key of expected) {
-      expect(typeof esm[key]).toBe("function");
-      expect(typeof cjs[key]).toBe("function");
-    }
-
-    for (const leaked of ["report", "resetReportStateForTests", "trackShieldEvaluation"]) {
-      expect(keyIn(esm, leaked)).toBe(false);
-      expect(keyIn(cjs, leaked)).toBe(false);
-    }
-  });
 });
-
-function keyIn(mod: Record<string, unknown>, key: string) {
-  return Object.prototype.hasOwnProperty.call(mod, key);
-}
 
 describe("useRenderShield semantics", () => {
   beforeEach(() => resetReportStateForTests());
