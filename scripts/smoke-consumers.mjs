@@ -421,27 +421,45 @@ function main() {
     log("reusing existing dist/ (--from-built)");
   }
 
-  // Pack
-  for (const f of readdirSync(ROOT)) {
-    if (f.endsWith(".tgz")) rmSync(join(ROOT, f), { force: true });
+  // Regression: unrelated root-level *.tgz must never be deleted by smoke.
+  const rootTgzSentinel = join(ROOT, `.rs-smoke-sentinel-${process.pid}.tgz`);
+  writeFileSync(rootTgzSentinel, "smoke-sentinel-not-a-package\n");
+
+  // Pack into a smoke-owned temp directory only.
+  // Never enumerate or delete repository-root *.tgz files.
+  const packDir = mkdtempSync(join(tmpdir(), "rs-r2-pack-"));
+  try {
+    run(`npm pack --pack-destination ${JSON.stringify(packDir)}`, { cwd: ROOT });
+    const packed = readdirSync(packDir).filter((f) => f.endsWith(".tgz"));
+    if (packed.length !== 1) {
+      fail(
+        `expected exactly one smoke-owned tarball in ${packDir}, found: ${
+          packed.join(", ") || "(none)"
+        }`
+      );
+    }
+    const tgzPath = join(packDir, packed[0]);
+    const files = listTarballFiles(tgzPath);
+    verifyTarballContents(files);
+
+    const size = readFileSync(tgzPath).byteLength;
+    log(`packed ${packed[0]} → ${packDir} (${size} bytes, ${files.length} entries)`);
+
+    for (const v of REACT_VERSIONS) {
+      smokeReactVersion(tgzPath, v);
+    }
+
+    if (!existsSync(rootTgzSentinel)) {
+      fail("smoke deleted an unrelated repository-root .tgz (sentinel missing)");
+    }
+    log("root .tgz sentinel preserved (no glob-delete of repo tarballs)");
+
+    log("ALL CONSUMER SMOKES PASSED");
+  } finally {
+    rmSync(packDir, { recursive: true, force: true });
+    log(`cleaned smoke-owned pack dir ${packDir}`);
+    rmSync(rootTgzSentinel, { force: true });
   }
-  run(`npm pack`, { cwd: ROOT });
-  const tgz = readdirSync(ROOT).find((f) => f.endsWith(".tgz"));
-  if (!tgz) fail("npm pack produced no tarball");
-  const tgzPath = join(ROOT, tgz);
-  const files = listTarballFiles(tgzPath);
-  verifyTarballContents(files);
-
-  const size = readFileSync(tgzPath).byteLength;
-  log(`packed ${tgz} (${size} bytes, ${files.length} entries)`);
-
-  for (const v of REACT_VERSIONS) {
-    smokeReactVersion(tgzPath, v);
-  }
-
-  // Cleanup tarball from workspace (keep dist for local inspection)
-  rmSync(tgzPath, { force: true });
-  log("ALL CONSUMER SMOKES PASSED");
 }
 
 main();
