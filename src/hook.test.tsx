@@ -1,5 +1,6 @@
+import React, { StrictMode, useState } from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { renderHook } from "@testing-library/react";
+import { render, renderHook, act } from "@testing-library/react";
 import { useRenderShield, useRenderShieldReport } from "./hook";
 import { resetReportStateForTests } from "./report";
 
@@ -294,5 +295,162 @@ describe("useRenderShieldReport diagnostics-only contract", () => {
     rerender({ p: { id: 1, meta: 2 } });
 
     expect(executions).toBe(3);
+  });
+
+  it("does not stabilize when customCompare returns true", () => {
+    const initialProps = { id: 1, meta: "a" };
+    const nextProps = { id: 1, meta: "b" };
+
+    const { result, rerender } = renderHook(
+      ({ p }) =>
+        useRenderShieldReport(p, {
+          customCompare: () => true,
+        }),
+      { initialProps: { p: initialProps } }
+    );
+
+    rerender({ p: nextProps });
+    expect(result.current).toBe(nextProps);
+  });
+});
+
+describe("customCompare", () => {
+  beforeEach(() => {
+    resetReportStateForTests();
+  });
+
+  afterEach(async () => {
+    await flushMicrotasks();
+    resetReportStateForTests();
+  });
+
+  it("true means equal/shield; false means accept new value (useRenderShield)", () => {
+    const a = { id: 1, label: "a" };
+    const b = { id: 1, label: "b" };
+    const c = { id: 2, label: "c" };
+
+    const { result, rerender } = renderHook(
+      ({ p }) =>
+        useRenderShield(p, {
+          customCompare: (prev, next) => prev.id === next.id,
+        }),
+      { initialProps: { p: a } }
+    );
+
+    rerender({ p: b });
+    expect(result.current).toBe(a);
+
+    rerender({ p: c });
+    expect(result.current).toBe(c);
+  });
+
+  it("propagates customCompare throw (does not swallow)", () => {
+    const { rerender } = renderHook(
+      ({ p }) =>
+        useRenderShield(p, {
+          customCompare: () => {
+            throw new Error("hook-compare-failed");
+          },
+        }),
+      { initialProps: { p: { id: 1 } } }
+    );
+
+    expect(() => rerender({ p: { id: 2 } })).toThrow("hook-compare-failed");
+  });
+});
+
+describe("StrictMode / render-phase ref investigation", () => {
+  beforeEach(() => {
+    resetReportStateForTests();
+  });
+
+  afterEach(async () => {
+    await flushMicrotasks();
+    resetReportStateForTests();
+  });
+
+  it("stabilizes correctly across StrictMode double-invoke and updates", () => {
+    // Investigation (R2): render-phase ref writes exist, but StrictMode double
+    // invocation and committed state sequences show no externally incorrect
+    // stabilization. Concurrent discarded-render modeling without React
+    // internals remains out of scope — verdict: SAFE for observed StrictMode
+    // behavior; concurrent discard remains unproven (see R2 report).
+    const seen: Array<{ id: number; meta: string }> = [];
+
+    function Probe({ value }: { value: { id: number; meta: string } }) {
+      const shielded = useRenderShield(value, { watch: ["id"] });
+      seen.push(shielded);
+      return <div data-testid="id">{shielded.id}</div>;
+    }
+
+    const { rerender, getByTestId } = render(
+      <StrictMode>
+        <Probe value={{ id: 1, meta: "a" }} />
+      </StrictMode>
+    );
+
+    expect(getByTestId("id").textContent).toBe("1");
+    const firstCommitted = seen[seen.length - 1];
+
+    rerender(
+      <StrictMode>
+        <Probe value={{ id: 1, meta: "b" }} />
+      </StrictMode>
+    );
+
+    expect(getByTestId("id").textContent).toBe("1");
+    expect(seen[seen.length - 1]).toBe(firstCommitted);
+
+    rerender(
+      <StrictMode>
+        <Probe value={{ id: 2, meta: "c" }} />
+      </StrictMode>
+    );
+
+    expect(getByTestId("id").textContent).toBe("2");
+    expect(seen[seen.length - 1]).toEqual({ id: 2, meta: "c" });
+  });
+
+  it("does not leak a discarded intermediate value into committed stabilization (state sequence)", () => {
+    function Parent() {
+      const [value, setValue] = useState({ id: 1, step: "a" });
+      const shielded = useRenderShield(value, { watch: ["id"] });
+
+      return (
+        <div>
+          <div data-testid="out">{`${shielded.id}:${shielded.step}`}</div>
+          <button
+            type="button"
+            onClick={() => setValue({ id: 1, step: "b" })}
+          >
+            same-id
+          </button>
+          <button
+            type="button"
+            onClick={() => setValue({ id: 2, step: "c" })}
+          >
+            new-id
+          </button>
+        </div>
+      );
+    }
+
+    const { getByTestId, getByText } = render(
+      <StrictMode>
+        <Parent />
+      </StrictMode>
+    );
+
+    expect(getByTestId("out").textContent).toBe("1:a");
+
+    act(() => {
+      getByText("same-id").click();
+    });
+    expect(getByTestId("out").textContent).toBe("1:a");
+
+    act(() => {
+      getByText("new-id").click();
+    });
+    expect(getByTestId("out").textContent).toBe("2:c");
   });
 });

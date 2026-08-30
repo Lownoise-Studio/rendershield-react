@@ -205,4 +205,37 @@ describe("withRenderShield HOC", () => {
     toast?.remove();
     process.env.NODE_ENV = originalEnv;
   });
+
+  it("customCompare true shields (prevents execution); false allows rerender", () => {
+    let renders = 0;
+    const Base = (props: { id: number }) => {
+      renders += 1;
+      return <div>{props.id}</div>;
+    };
+
+    const Shielded = withRenderShield(Base, {
+      customCompare: (prev, next) => prev.id === next.id,
+    });
+
+    const { rerender } = render(<Shielded id={1} />);
+    expect(renders).toBe(1);
+
+    rerender(<Shielded id={1} />);
+    expect(renders).toBe(1);
+
+    rerender(<Shielded id={2} />);
+    expect(renders).toBe(2);
+  });
+
+  it("propagates customCompare throw from the memo comparator", () => {
+    const Base = (props: { id: number }) => <div>{props.id}</div>;
+    const Shielded = withRenderShield(Base, {
+      customCompare: () => {
+        throw new Error("compare-failed");
+      },
+    });
+
+    const { rerender } = render(<Shielded id={1} />);
+    expect(() => rerender(<Shielded id={2} />)).toThrow("compare-failed");
+  });
 });

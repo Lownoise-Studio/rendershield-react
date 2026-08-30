@@ -12,6 +12,11 @@ All notable changes to this project are documented in this file.
 - `useRenderShieldReport` is diagnostics-only (`shield: false` always); it is no longer a bare alias of `useRenderShield`.
 - Contract drift no longer flags changes to paths listed in `contract.watch`.
 
+### Added
+- R2 compatibility proof: packed-tarball ESM/CJS consumers, React 18.3.1 + React 19 matrix, TypeScript `skipLibCheck: false` consumer, SSR `renderToString` smoke (`scripts/smoke-consumers.mjs`).
+- CI split: source unit job + React-version consumer matrix.
+- `customCompare` and StrictMode regression coverage for HOC/hook/report APIs.
+
 ## [1.0.0] - 2026-08-23
 
 ### Fixed
