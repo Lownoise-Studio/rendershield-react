@@ -1,5 +1,10 @@
 RenderShield React
-A semantic instrumentation layer for React render boundaries.
+
+RenderShield React makes React render boundaries observable and controllable.
+Diagnose why watched values changed, define explicit watch contracts, and
+stabilize expensive work when selected changes don't require recomputation.
+
+`useRenderShieldReport` provides diagnostics without stabilization.
 
 React can skip rerenders.
 
@@ -7,11 +12,13 @@ But when it does — how do you verify what was actually prevented, and why?
 
 RenderShield React is a lightweight developer instrument that:
 
-Applies structured prop comparison
+Applies structured comparison to selected values (not a full deep compare of all props)
 
 Allows surgical deep-watching of specific nested paths
 
-Reports why a render was shielded or accepted
+Reports why a value was shielded or accepted
+
+Can stabilize expensive downstream work when watched paths are unchanged
 
 Provides pattern-based recommendations (v0.4.0+)
 
@@ -21,9 +28,10 @@ Includes runtime warnings to detect and clarify misuse (v0.4.0+)
 
 It does not mutate props.
 It does not rewrite state.
+It does not prevent every rerender.
 It does not guarantee performance gains.
 
-It exposes the decision boundary.
+It exposes — and optionally acts on — the decision boundary.
 
 It prefers doing nothing over doing the wrong thing.
 
@@ -45,7 +53,7 @@ Blindly applying React.memo, useMemo, or useCallback can obscure the underlying 
 
 RenderShield React is not a magic fix.
 
-It is a visibility instrument.
+It is an observability and control instrument for render boundaries.
 
 It helps you answer:
 
