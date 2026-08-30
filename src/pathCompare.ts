@@ -10,6 +10,16 @@ export function getAtPath(obj: any, path: string): any {
 }
 
 /**
+ * Canonical string form of a watch/contract path.
+ * `items[0].id` and `items.0.id` both become `items.0.id`.
+ */
+export function canonicalizePath(path: string): string {
+  return normalizePath(path)
+    .map((p) => String(p))
+    .join(".");
+}
+
+/**
  * Deep compare ONLY the values at watched paths.
  * This is intentionally targeted: no full-object deep recursion.
  */
@@ -47,17 +57,17 @@ export function compareWatchedPaths<T>(
  * - primitives (via Object.is, including NaN)
  * - arrays
  * - plain objects (`Object.prototype` or `null` prototype)
- * - Date (compared by time value)
- * - RegExp (compared by source + flags)
- * - Map / Set (size + SameValueZero membership; values deep-compared for Map)
+ * - exact Date / RegExp / Map / Set instances (not subclasses)
+ * - Date compared by time value; RegExp by source + flags
+ * - Map / Set by size + SameValueZero membership (Map values deep-compared)
  *
- * Cycle-safe via WeakMap. Not intended for huge graphs — watch paths should
- * stay small and intentional.
+ * Cycle-safe via left→right pair tracking. Not intended for huge graphs —
+ * watch paths should stay small and intentional.
  *
  * Correctness principle: when semantic equality cannot be established safely,
- * return false (prefer unequal). Opaque class instances, prototype mismatches,
- * and other non-plain objects therefore never compare equal merely because
- * Object.keys() is empty.
+ * return false (prefer unequal). Opaque class instances, built-in subclasses,
+ * prototype mismatches, and other non-plain objects therefore never compare
+ * equal merely because Object.keys() is empty.
  */
 export function deepEqual(a: any, b: any, seen = new WeakMap<object, object>()): boolean {
   if (Object.is(a, b)) return true;
@@ -69,8 +79,13 @@ export function deepEqual(a: any, b: any, seen = new WeakMap<object, object>()):
   // Prototype / constructor mismatch → unequal (before cycle bookkeeping).
   if (Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false;
 
+  // Pair consistency: if `a` was already paired with a different `b`, unequal.
+  // Do not overwrite the existing relation (avoids infinite recursion on
+  // differently shaped cycles).
   const aSeen = seen.get(a);
-  if (aSeen && aSeen === b) return true;
+  if (aSeen !== undefined) {
+    return aSeen === b;
+  }
   seen.set(a, b);
 
   if (Array.isArray(a)) {
@@ -82,36 +97,37 @@ export function deepEqual(a: any, b: any, seen = new WeakMap<object, object>()):
     return true;
   }
 
-  if (a instanceof Date) {
-    if (!(b instanceof Date)) return false;
-    const at = a.getTime();
-    const bt = b.getTime();
+  // Exact built-ins only — subclasses are opaque (prefer unequal).
+  if (Object.getPrototypeOf(a) === Date.prototype) {
+    const at = (a as Date).getTime();
+    const bt = (b as Date).getTime();
     if (Number.isNaN(at) && Number.isNaN(bt)) return true;
     return at === bt;
   }
 
-  if (a instanceof RegExp) {
-    if (!(b instanceof RegExp)) return false;
-    return a.source === b.source && a.flags === b.flags;
+  if (Object.getPrototypeOf(a) === RegExp.prototype) {
+    return (a as RegExp).source === (b as RegExp).source && (a as RegExp).flags === (b as RegExp).flags;
   }
 
-  if (a instanceof Map) {
-    if (!(b instanceof Map)) return false;
-    if (a.size !== b.size) return false;
-    for (const [key, value] of a) {
-      if (!b.has(key)) return false;
-      if (!deepEqual(value, b.get(key), seen)) return false;
+  if (Object.getPrototypeOf(a) === Map.prototype) {
+    const mapA = a as Map<unknown, unknown>;
+    const mapB = b as Map<unknown, unknown>;
+    if (mapA.size !== mapB.size) return false;
+    for (const [key, value] of mapA) {
+      if (!mapB.has(key)) return false;
+      if (!deepEqual(value, mapB.get(key), seen)) return false;
     }
     return true;
   }
 
-  if (a instanceof Set) {
-    if (!(b instanceof Set)) return false;
-    if (a.size !== b.size) return false;
-    for (const value of a) {
+  if (Object.getPrototypeOf(a) === Set.prototype) {
+    const setA = a as Set<unknown>;
+    const setB = b as Set<unknown>;
+    if (setA.size !== setB.size) return false;
+    for (const value of setA) {
       // Set membership uses SameValueZero — prefer unequal over deep-matching
       // distinct object members inside the set.
-      if (!b.has(value)) return false;
+      if (!setB.has(value)) return false;
     }
     return true;
   }

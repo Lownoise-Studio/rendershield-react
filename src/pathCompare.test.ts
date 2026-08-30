@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getAtPath, compareWatchedPaths, deepEqual } from './pathCompare';
+import { getAtPath, compareWatchedPaths, deepEqual, canonicalizePath } from './pathCompare';
 
 describe('Path Comparison Engine', () => {
   const data = {
@@ -10,6 +10,12 @@ describe('Path Comparison Engine', () => {
   it('should extract nested values correctly (getAtPath)', () => {
     expect(getAtPath(data, 'user.profile.name')).toBe('Gemini');
     expect(getAtPath(data, 'items[1].val')).toBe(20);
+  });
+
+  it('canonicalizes equivalent path syntaxes', () => {
+    expect(canonicalizePath('items[0].id')).toBe('items.0.id');
+    expect(canonicalizePath('items.0.id')).toBe('items.0.id');
+    expect(canonicalizePath('user.profile.name')).toBe('user.profile.name');
   });
 
   it('should detect stability in watched paths', () => {
@@ -61,6 +67,38 @@ describe('deepEqual supported domain', () => {
     expect(deepEqual(new Set([{ x: 1 }]), new Set([{ x: 1 }]))).toBe(false);
   });
 
+  it('treats built-in subclasses as opaque (prefer unequal)', () => {
+    class SecretMap extends Map<string, number> {
+      #secret: string;
+      constructor(entries?: Iterable<readonly [string, number]>, secret = 'x') {
+        super(entries);
+        this.#secret = secret;
+      }
+    }
+    class SecretSet extends Set<number> {
+      #secret: string;
+      constructor(values?: Iterable<number>, secret = 'x') {
+        super(values);
+        this.#secret = secret;
+      }
+    }
+    class SecretDate extends Date {}
+    class SecretRegExp extends RegExp {}
+
+    expect(
+      deepEqual(new SecretMap([['a', 1]]), new SecretMap([['a', 1]]))
+    ).toBe(false);
+    expect(deepEqual(new SecretSet([1]), new SecretSet([1]))).toBe(false);
+    expect(deepEqual(new SecretDate(1), new SecretDate(1))).toBe(false);
+    expect(deepEqual(new SecretRegExp('ab', 'g'), new SecretRegExp('ab', 'g'))).toBe(
+      false
+    );
+
+    // Same reference still equal via Object.is
+    const shared = new SecretMap([['a', 1]]);
+    expect(deepEqual(shared, shared)).toBe(true);
+  });
+
   it('does not treat opaque class instances as equal via empty keys', () => {
     class Opaque {
       #value: number;
@@ -79,6 +117,44 @@ describe('deepEqual supported domain', () => {
     expect(deepEqual(new Date(1), {})).toBe(false);
     expect(deepEqual(new Map(), {})).toBe(false);
     expect(deepEqual(/a/, {})).toBe(false);
+  });
+
+  it('terminates on equivalent self-cyclic Maps', () => {
+    const a = new Map<string, unknown>();
+    a.set('self', a);
+    const b = new Map<string, unknown>();
+    b.set('self', b);
+
+    expect(() => deepEqual(a, b)).not.toThrow();
+    expect(deepEqual(a, b)).toBe(true);
+  });
+
+  it('terminates and returns unequal for differently shaped cyclic Maps', () => {
+    const a = new Map<string, unknown>();
+    a.set('self', a);
+
+    const b1 = new Map<string, unknown>();
+    const b2 = new Map<string, unknown>();
+    b1.set('self', b2);
+    b2.set('self', b1);
+
+    expect(() => deepEqual(a, b1)).not.toThrow();
+    expect(deepEqual(a, b1)).toBe(false);
+  });
+
+  it('preserves cycle-safe equality for plain objects', () => {
+    const a: Record<string, unknown> = {};
+    a.self = a;
+    const b: Record<string, unknown> = {};
+    b.self = b;
+    expect(deepEqual(a, b)).toBe(true);
+
+    const c: Record<string, unknown> = {};
+    const d: Record<string, unknown> = {};
+    c.self = d;
+    d.self = c;
+    expect(() => deepEqual(a, c)).not.toThrow();
+    expect(deepEqual(a, c)).toBe(false);
   });
 });
 

@@ -164,9 +164,10 @@ If watched paths are stable, shielding may occur even if unrelated keys changed.
 If a watched path changes, shielding is disabled.
 
 Watch-path values are compared with a narrow deepEqual (primitives, arrays,
-plain objects, Date, RegExp, Map, Set). Opaque instances and other non-plain
-values compare equal only by reference — when equality cannot be established
-safely, paths are treated as changed (prefer unequal).
+plain objects, and exact Date / RegExp / Map / Set instances — not subclasses).
+Opaque instances and other non-plain values compare equal only by reference —
+when equality cannot be established safely, paths are treated as changed
+(prefer unequal).
 
 This keeps comparison surgical and intentional.
 
@@ -379,6 +380,18 @@ Contract drift detection for changes **outside** the declared contract paths
 (a change to a path listed in `contract.watch` is expected, not drift)
 
 Makes "what matters" discoverable and verifiable
+
+Contract drift semantics (current diagnostic payload):
+
+- Drift is derived from top-level `changedKeys` plus `watchedChanged`
+- Declared watched-path changes (paths in `contract.watch`) are compliant
+- A top-level root covered by a contract path (e.g. `user` when the contract
+  lists `user.id`) is not treated as drift by itself
+- Nested sibling changes beneath a contracted root may be indistinguishable
+  from parent-reference-only updates with the current `RenderShieldDiff`
+  fields — both can look like `changedKeys: ["user"]`, `watchedStable:
+  ["user.id"]`, `watchedChanged: []`. This is a known limitation; RenderShield
+  does not deep-diff unwatched siblings to invent drift signals.
 
 Pattern-Based Recommendations (v0.4.0+)
 
