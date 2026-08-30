@@ -55,7 +55,7 @@ export function compareWatchedPaths<T>(
  *
  * Supported domain (intentionally narrow):
  * - primitives (via Object.is, including NaN)
- * - arrays
+ * - exact Array instances (`Array.prototype` only — not subclasses)
  * - plain objects (`Object.prototype` or `null` prototype)
  * - exact Date / RegExp / Map / Set instances (not subclasses)
  * - Date compared by time value; RegExp by source + flags
@@ -88,11 +88,12 @@ export function deepEqual(a: any, b: any, seen = new WeakMap<object, object>()):
   }
   seen.set(a, b);
 
-  if (Array.isArray(a)) {
-    if (!Array.isArray(b)) return false;
-    if (a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) {
-      if (!deepEqual(a[i], b[i], seen)) return false;
+  if (Object.getPrototypeOf(a) === Array.prototype) {
+    const arrA = a as unknown[];
+    const arrB = b as unknown[];
+    if (arrA.length !== arrB.length) return false;
+    for (let i = 0; i < arrA.length; i++) {
+      if (!deepEqual(arrA[i], arrB[i], seen)) return false;
     }
     return true;
   }

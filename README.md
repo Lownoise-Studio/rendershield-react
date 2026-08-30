@@ -163,8 +163,8 @@ If watched paths are stable, shielding may occur even if unrelated keys changed.
 
 If a watched path changes, shielding is disabled.
 
-Watch-path values are compared with a narrow deepEqual (primitives, arrays,
-plain objects, and exact Date / RegExp / Map / Set instances — not subclasses).
+Watch-path values are compared with a narrow deepEqual (primitives, plain
+objects, and exact Array / Date / RegExp / Map / Set instances — not subclasses).
 Opaque instances and other non-plain values compare equal only by reference —
 when equality cannot be established safely, paths are treated as changed
 (prefer unequal).

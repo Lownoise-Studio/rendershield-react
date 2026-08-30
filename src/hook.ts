@@ -6,6 +6,10 @@ import { getShallowDiff } from "./shallowCompare";
 import { compareWatchedPaths } from "./pathCompare";
 import { report, getReportBatchKey, trackShieldEvaluation, shouldSurfaceRecommendations } from "./report";
 
+/** Internal uninitialized marker — must not collide with any legitimate T (incl. null). */
+const UNINITIALIZED: unique symbol = Symbol("render-shield-uninitialized");
+type PrevSlot<T> = T | typeof UNINITIALIZED;
+
 /**
  * useRenderShield
  * - Shields by returning the previous value when the selected comparison says "equal".
@@ -18,7 +22,7 @@ import { report, getReportBatchKey, trackShieldEvaluation, shouldSurfaceRecommen
 export function useRenderShield<T>(value: T, options?: RenderShieldOptions<T>): T {
   const opts = options ?? {};
 
-  const prevRef = useRef<T | null>(null);
+  const prevRef = useRef<PrevSlot<T>>(UNINITIALIZED);
   const renderCountRef = useRef(0);
   const lastReportKeyRef = useRef<string | null>(null);
   const recommendationsSurfacedRef = useRef(false);
@@ -27,7 +31,7 @@ export function useRenderShield<T>(value: T, options?: RenderShieldOptions<T>): 
   const renderCount = renderCountRef.current;
   const prev = prevRef.current;
 
-  if (prev === null) {
+  if (prev === UNINITIALIZED) {
     prevRef.current = value;
     if (opts.debug) {
       reportDiffIfNew(buildInitialDiff(value, opts, renderCount), lastReportKeyRef, recommendationsSurfacedRef);
