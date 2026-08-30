@@ -17,6 +17,10 @@ All notable changes to this project are documented in this file.
 - CI split: source unit job + React-version consumer matrix.
 - `customCompare` and StrictMode regression coverage for HOC/hook/report APIs.
 
+### Fixed
+- `useRenderShield` no longer uses `null` as an uninitialized sentinel (legitimate `null` values enter normal compare/shield paths).
+- `deepEqual` array structural equality applies only to exact `Array.prototype` instances (subclasses prefer unequal, aligning with Map/Set/Date/RegExp).
+
 ## [1.0.0] - 2026-08-23
 
 ### Fixed

@@ -84,6 +84,7 @@ describe('deepEqual supported domain', () => {
     }
     class SecretDate extends Date {}
     class SecretRegExp extends RegExp {}
+    class MyArray extends Array<number> {}
 
     expect(
       deepEqual(new SecretMap([['a', 1]]), new SecretMap([['a', 1]]))
@@ -93,6 +94,13 @@ describe('deepEqual supported domain', () => {
     expect(deepEqual(new SecretRegExp('ab', 'g'), new SecretRegExp('ab', 'g'))).toBe(
       false
     );
+
+    const a = MyArray.from([1, 2]);
+    const b = MyArray.from([1, 2]);
+    (a as MyArray & { extra?: string }).extra = 'a';
+    (b as MyArray & { extra?: string }).extra = 'b';
+    expect(deepEqual(a, b)).toBe(false);
+    expect(deepEqual(a, a)).toBe(true);
 
     // Same reference still equal via Object.is
     const shared = new SecretMap([['a', 1]]);

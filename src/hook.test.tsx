@@ -359,6 +359,110 @@ describe("customCompare", () => {
   });
 });
 
+describe("null / undefined value sentinel", () => {
+  beforeEach(() => {
+    resetReportStateForTests();
+  });
+
+  afterEach(async () => {
+    await flushMicrotasks();
+    resetReportStateForTests();
+  });
+
+  it("initializes with null as a legitimate first value", () => {
+    const { result } = renderHook(() =>
+      useRenderShield<string | null>(null, { customCompare: () => true })
+    );
+    expect(result.current).toBeNull();
+  });
+
+  it("null → non-null with customCompare true stabilizes previous null and invokes compare", () => {
+    let compareCalls = 0;
+    const { result, rerender } = renderHook(
+      ({ v }) =>
+        useRenderShield<string | null>(v, {
+          customCompare: (prev, next) => {
+            compareCalls += 1;
+            return true;
+          },
+        }),
+      { initialProps: { v: null as string | null } }
+    );
+
+    expect(result.current).toBeNull();
+    expect(compareCalls).toBe(0);
+
+    rerender({ v: "hello" });
+    expect(result.current).toBeNull();
+    expect(compareCalls).toBe(1);
+  });
+
+  it("after committed null, another null render uses comparison (not re-init)", () => {
+    let compareCalls = 0;
+    const { result, rerender } = renderHook(
+      ({ v }) =>
+        useRenderShield<string | null>(v, {
+          customCompare: (prev, next) => {
+            compareCalls += 1;
+            return Object.is(prev, next);
+          },
+        }),
+      { initialProps: { v: null as string | null } }
+    );
+
+    rerender({ v: null });
+    expect(result.current).toBeNull();
+    expect(compareCalls).toBe(1);
+
+    rerender({ v: null });
+    expect(result.current).toBeNull();
+    expect(compareCalls).toBe(2);
+  });
+
+  it("undefined remains a legitimate value and shields correctly", () => {
+    let compareCalls = 0;
+    const { result, rerender } = renderHook(
+      ({ v }) =>
+        useRenderShield<string | undefined>(v, {
+          customCompare: () => {
+            compareCalls += 1;
+            return true;
+          },
+        }),
+      { initialProps: { v: undefined as string | undefined } }
+    );
+
+    expect(result.current).toBeUndefined();
+    rerender({ v: "x" });
+    expect(result.current).toBeUndefined();
+    expect(compareCalls).toBe(1);
+  });
+
+  it("non-null watch shielding remains unchanged", () => {
+    const a = { id: 1, meta: "a" };
+    const b = { id: 1, meta: "b" };
+    const { result, rerender } = renderHook(
+      ({ p }) => useRenderShield(p, { watch: ["id"] }),
+      { initialProps: { p: a } }
+    );
+    rerender({ p: b });
+    expect(result.current).toBe(a);
+  });
+
+  it("useRenderShieldReport still never stabilizes null → non-null", () => {
+    const { result, rerender } = renderHook(
+      ({ v }) =>
+        useRenderShieldReport<string | null>(v, {
+          customCompare: () => true,
+        }),
+      { initialProps: { v: null as string | null } }
+    );
+
+    rerender({ v: "next" });
+    expect(result.current).toBe("next");
+  });
+});
+
 describe("StrictMode / render-phase ref investigation", () => {
   beforeEach(() => {
     resetReportStateForTests();
