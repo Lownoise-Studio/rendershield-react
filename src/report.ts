@@ -1,6 +1,8 @@
 // src/report.ts
 
 import type { RenderShieldDiff } from "./types";
+import { canonicalizePath } from "./pathCompare";
+
 
 /**
  * Dev-only reporter with micro-task batching.
@@ -442,16 +444,32 @@ function buildBatchKey(diff: RenderShieldDiff): string {
 function getContractTopLevelKeys(watchPaths: string[]): Set<string> {
   const keys = new Set<string>();
   for (const path of watchPaths) {
-    const first = path.replace(/\[(\d+)\]/g, ".$1").split(".").filter(Boolean)[0];
+    const first = canonicalizePath(path).split(".").filter(Boolean)[0];
     if (first) keys.add(first);
   }
   return keys;
 }
 
+/**
+ * Contract drift = changes outside the declared contract.
+ *
+ * A change to a path explicitly listed in contract.watch is expected behavior,
+ * not drift. Drift keys come from:
+ * - top-level changedKeys whose root is not covered by any contract.watch path
+ * - watchedChanged paths that are not themselves listed in contract.watch
+ *
+ * Path membership uses canonicalizePath so `items[0].id` and `items.0.id`
+ * are treated as the same declared path.
+ *
+ * Known limitation: nested sibling changes under a contracted root (e.g.
+ * `user.name` when contract.watch is `user.id`) can produce the same
+ * diagnostic payload as a parent-reference-only update, so they are not
+ * reliably detectable as drift with the current RenderShieldDiff fields.
+ */
 function getContractDriftKeys(diff: RenderShieldDiff): string[] {
   if (!diff.contract || diff.contract.watch.length === 0) return [];
 
-  const contractPathSet = new Set(diff.contract.watch);
+  const contractPathSet = new Set(diff.contract.watch.map(canonicalizePath));
   const topLevelKeys = getContractTopLevelKeys(diff.contract.watch);
   const drift: string[] = [];
 
@@ -462,7 +480,8 @@ function getContractDriftKeys(diff: RenderShieldDiff): string[] {
   }
 
   for (const path of diff.watchedChanged) {
-    if (contractPathSet.has(path) && !drift.includes(path)) {
+    const canonical = canonicalizePath(path);
+    if (!contractPathSet.has(canonical) && !drift.includes(path)) {
       drift.push(path);
     }
   }

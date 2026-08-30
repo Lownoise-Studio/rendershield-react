@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- `deepEqual` no longer treats distinct Date / Map / Set / RegExp / opaque instances as equal via empty `Object.keys()`.
+- `deepEqual` special-cases only exact built-in Date / RegExp / Map / Set prototypes (subclasses prefer unequal).
+- Cycle pair tracking returns unequal on mismatched left→right pairings (no stack overflow on differently shaped cyclic Maps).
+- Contract path membership uses canonical path form (`items[0].id` ≡ `items.0.id`).
+- `useRenderShieldReport` is diagnostics-only (`shield: false` always); it is no longer a bare alias of `useRenderShield`.
+- Contract drift no longer flags changes to paths listed in `contract.watch`.
+
 ## [1.0.0] - 2026-08-23
 
 ### Fixed

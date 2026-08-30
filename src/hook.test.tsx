@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook } from "@testing-library/react";
-import { useRenderShield } from "./hook";
+import { useRenderShield, useRenderShieldReport } from "./hook";
 import { resetReportStateForTests } from "./report";
 
 async function flushMicrotasks() {
@@ -195,5 +195,104 @@ describe("useRenderShield Hook", () => {
 
     groupSpy.mockRestore();
     process.env.NODE_ENV = originalEnv;
+  });
+});
+
+describe("useRenderShieldReport diagnostics-only contract", () => {
+  beforeEach(() => {
+    resetReportStateForTests();
+  });
+
+  afterEach(async () => {
+    await flushMicrotasks();
+    resetReportStateForTests();
+  });
+
+  it("is not the same runtime function as useRenderShield", () => {
+    expect(useRenderShieldReport).not.toBe(useRenderShield);
+  });
+
+  it("always returns the current value even when comparison would shield", () => {
+    const initialProps = { id: 1, metadata: { lastUpdated: "10:00" } };
+    const nextProps = { id: 1, metadata: { lastUpdated: "10:05" } };
+    const options = { watch: ["id"] };
+
+    const { result, rerender } = renderHook(
+      ({ p, o }) => useRenderShieldReport(p, o),
+      {
+        initialProps: { p: initialProps, o: options },
+      }
+    );
+
+    rerender({ p: nextProps, o: options });
+
+    expect(result.current).toBe(nextProps);
+    expect(result.current.metadata.lastUpdated).toBe("10:05");
+  });
+
+  it("ignores shield: true from callers (cannot opt into shielding)", () => {
+    const initialProps = { id: 1, noise: "a" };
+    const nextProps = { id: 1, noise: "b" };
+
+    const { result, rerender } = renderHook(
+      ({ p }) =>
+        useRenderShieldReport(p, { watch: ["id"], shield: true }),
+      { initialProps: { p: initialProps } }
+    );
+
+    rerender({ p: nextProps });
+
+    expect(result.current).toBe(nextProps);
+    expect(result.current.noise).toBe("b");
+  });
+
+  it("still emits diagnostics when debug is enabled", async () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "development";
+
+    const groupSpy = vi
+      .spyOn(console, "groupCollapsed")
+      .mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "groupEnd").mockImplementation(() => {});
+
+    const options = {
+      watch: ["id"],
+      debug: true,
+      componentName: "ReportOnlyTest",
+    };
+
+    const { rerender } = renderHook(
+      ({ p }) => useRenderShieldReport(p, options),
+      { initialProps: { p: { id: 1, meta: 0 } } }
+    );
+
+    rerender({ p: { id: 1, meta: 1 } });
+    await flushMicrotasks();
+
+    expect(groupSpy).toHaveBeenCalledWith(
+      expect.stringContaining("[RenderShield]")
+    );
+
+    groupSpy.mockRestore();
+    process.env.NODE_ENV = originalEnv;
+  });
+
+  it("does not prevent component execution (hook still runs each render)", () => {
+    let executions = 0;
+    const options = { watch: ["id"] };
+
+    const { rerender } = renderHook(
+      ({ p }) => {
+        executions += 1;
+        return useRenderShieldReport(p, options);
+      },
+      { initialProps: { p: { id: 1, meta: 0 } } }
+    );
+
+    rerender({ p: { id: 1, meta: 1 } });
+    rerender({ p: { id: 1, meta: 2 } });
+
+    expect(executions).toBe(3);
   });
 });
