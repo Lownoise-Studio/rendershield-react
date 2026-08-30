@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- `deepEqual` no longer treats distinct Date / Map / Set / RegExp / opaque instances as equal via empty `Object.keys()`.
+- `useRenderShieldReport` is diagnostics-only (`shield: false` always); it is no longer a bare alias of `useRenderShield`.
+- Contract drift no longer flags changes to paths listed in `contract.watch`.
+
 ## [1.0.0] - 2026-08-23
 
 ### Fixed

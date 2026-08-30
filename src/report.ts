@@ -448,6 +448,14 @@ function getContractTopLevelKeys(watchPaths: string[]): Set<string> {
   return keys;
 }
 
+/**
+ * Contract drift = changes outside the declared contract.
+ *
+ * A change to a path explicitly listed in contract.watch is expected behavior,
+ * not drift. Drift keys come from:
+ * - top-level changedKeys whose root is not covered by any contract.watch path
+ * - watchedChanged paths that are not themselves listed in contract.watch
+ */
 function getContractDriftKeys(diff: RenderShieldDiff): string[] {
   if (!diff.contract || diff.contract.watch.length === 0) return [];
 
@@ -462,7 +470,7 @@ function getContractDriftKeys(diff: RenderShieldDiff): string[] {
   }
 
   for (const path of diff.watchedChanged) {
-    if (contractPathSet.has(path) && !drift.includes(path)) {
+    if (!contractPathSet.has(path) && !drift.includes(path)) {
       drift.push(path);
     }
   }

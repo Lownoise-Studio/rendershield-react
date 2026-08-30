@@ -163,6 +163,11 @@ If watched paths are stable, shielding may occur even if unrelated keys changed.
 
 If a watched path changes, shielding is disabled.
 
+Watch-path values are compared with a narrow deepEqual (primitives, arrays,
+plain objects, Date, RegExp, Map, Set). Opaque instances and other non-plain
+values compare equal only by reference — when equality cannot be established
+safely, paths are treated as changed (prefer unequal).
+
 This keeps comparison surgical and intentional.
 
 Staleness Contract
@@ -282,11 +287,13 @@ This is useful for:
 - Auditing render behavior before implementing shielding
 - Verifying your watch paths are correct
 
-For clarity, you can also use the `useRenderShieldReport` alias:
+For clarity, use the `useRenderShieldReport` helper — a diagnostics-only wrapper that
+**always** forces `shield: false` (callers cannot re-enable shielding through options):
 
 import { useRenderShieldReport } from "@lownoise-studio/render-shield-react";
 
 const props = useRenderShieldReport(value, { debug: true, watch: ["user.id"] });
+// Always the current value; never a stabilized previous reference.
 
 Optional Visual HUD (v0.3+)
 
@@ -368,7 +375,8 @@ Explicit documentation of component dependencies
 
 Contract compliance reporting (✓ Compliant or ⚠ Drift)
 
-Contract drift detection in recommendations
+Contract drift detection for changes **outside** the declared contract paths
+(a change to a path listed in `contract.watch` is expected, not drift)
 
 Makes "what matters" discoverable and verifiable
 
@@ -496,7 +504,7 @@ Not an optimization promise.
 
 Status
 
-v0.4.0 (Current)
+1.0.0 (Current)
 
 Core hook stable
 
@@ -506,11 +514,11 @@ Watch-path targeting validated
 
 Type-safe
 
-Tests passing (14/14)
+Automated tests and CI (typecheck, test, build)
 
 CJS, ESM, and DTS builds
 
-New in v0.4.0:
+Included since 0.4.x / stabilized in 1.0.0:
 
 Pattern-based recommendations (low-noise, actionable)
 
@@ -520,7 +528,7 @@ Enhanced console output (summary statistics, contract compliance)
 
 Runtime warnings (staleness risk, hook/HOC clarification)
 
-Diagnostics-only mode (safe experimentation)
+Diagnostics-only mode (`shield: false` and `useRenderShieldReport`)
 
 v0.3.x: Optional visual development HUD support
 
@@ -528,7 +536,7 @@ v0.2.x: Core functionality and watch paths
 
 Feature Freeze & Feedback Cycles
 
-v0.4.0 represents a stable feature set focused on developer experience and safety.
+1.0.0 represents a stable feature set focused on developer experience and safety.
 
 We are freezing feature development to gather real-world feedback.
 

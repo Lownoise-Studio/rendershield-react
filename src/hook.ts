@@ -51,6 +51,21 @@ export function useRenderShield<T>(value: T, options?: RenderShieldOptions<T>): 
   return value;
 }
 
+/**
+ * Diagnostics-only companion to useRenderShield.
+ *
+ * Always forces `shield: false` so the current value is returned even when
+ * comparison would otherwise stabilize to a previous reference. Callers cannot
+ * opt back into shielding via options — that would violate the public contract.
+ * Diagnostics still run when `debug: true`.
+ */
+export function useRenderShieldReport<T>(
+  value: T,
+  options?: RenderShieldOptions<T>
+): T {
+  return useRenderShield(value, { ...options, shield: false });
+}
+
 function reportDiffIfNew(
   diff: RenderShieldDiff,
   lastReportKeyRef: { current: string | null },
