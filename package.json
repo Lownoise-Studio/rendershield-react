@@ -37,6 +37,9 @@
         "test": "vitest",
         "test:run": "vitest run",
         "typecheck": "tsc --noEmit",
+        "test:smoke": "node scripts/smoke-consumers.mjs",
+        "test:smoke:react18": "node scripts/smoke-consumers.mjs --react=18.3.1",
+        "test:smoke:react19": "node scripts/smoke-consumers.mjs --react=19",
         "prepublishOnly": "npm run typecheck && npm run test:run && npm run build"
     },
     "peerDependencies": {
