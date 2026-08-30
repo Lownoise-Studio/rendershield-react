@@ -1,7 +1,7 @@
 {
     "name": "@lownoise-studio/render-shield-react",
     "version": "1.0.1",
-    "description": "Lightweight React render diff shielding with structured diagnostics.",
+    "description": "Makes React render boundaries observable and controllable: diagnose watched changes, define watch contracts, and stabilize work when selected changes do not require recomputation.",
     "license": "MIT",
     "sideEffects": false,
     "repository": {
