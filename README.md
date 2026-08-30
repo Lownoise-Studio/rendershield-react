@@ -517,7 +517,7 @@ Not an optimization promise.
 
 Status
 
-1.0.0 (Current)
+1.0.1 (Current)
 
 Core hook stable
 
@@ -527,9 +527,11 @@ Watch-path targeting validated
 
 Type-safe
 
-Automated tests and CI (typecheck, test, build)
+Automated tests and CI (typecheck, test, build, React 18/19 consumer smoke)
 
 CJS, ESM, and DTS builds
+
+1.0.1 patch: correctness fixes for deep equality, contract drift, diagnostics-only reporting, null sentinel, and Array subclass handling; plus packed-consumer proof matrix.
 
 Included since 0.4.x / stabilized in 1.0.0:
 
@@ -549,7 +551,7 @@ v0.2.x: Core functionality and watch paths
 
 Feature Freeze & Feedback Cycles
 
-1.0.0 represents a stable feature set focused on developer experience and safety.
+1.0.x represents a stable feature set focused on developer experience and safety.
 
 We are freezing feature development to gather real-world feedback.
 

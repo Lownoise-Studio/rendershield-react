@@ -1,6 +1,6 @@
 {
     "name": "@lownoise-studio/render-shield-react",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Lightweight React render diff shielding with structured diagnostics.",
     "license": "MIT",
     "sideEffects": false,
