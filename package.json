@@ -8,6 +8,10 @@
         "type": "git",
         "url": "https://github.com/Lownoise-Studio/rendershield-react.git"
     },
+    "homepage": "https://github.com/Lownoise-Studio/rendershield-react",
+    "bugs": {
+        "url": "https://github.com/Lownoise-Studio/rendershield-react/issues"
+    },
     "keywords": [
         "react",
         "render",
