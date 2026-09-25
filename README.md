@@ -6,6 +6,9 @@ stabilize expensive work when selected changes don't require recomputation.
 
 `useRenderShieldReport` provides diagnostics without stabilization.
 
+Related: RenderShield Prerender (CLI) — https://github.com/Lownoise-Studio/rendershield · https://www.npmjs.com/package/@lownoise-studio/rendershield  
+RenderShield React and RenderShield Prerender are separate products with no shared runtime.
+
 React can skip rerenders.
 
 But when it does — how do you verify what was actually prevented, and why?
